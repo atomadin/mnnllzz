@@ -362,7 +362,8 @@ def typeset_tests(p, template_text):
         # Compile the source TeX and move the PDF to a different folder.
         pdfname = "compito_%03d" % test_data.testnr
         os.chdir("build")
-        os.system(f"pdflatex -quiet -jobname={pdfname} temp.tex")
+        # os.system(f"pdflatex -quiet -jobname={pdfname} temp.tex")
+        os.system(f"pdflatex --interaction=batchmode -jobname={pdfname} temp.tex")
         os.chdir("..")
         shutil.copy(os.path.join("build", f"{pdfname}.pdf"), "distribute")
 
@@ -392,7 +393,8 @@ def typeset_tests(p, template_text):
             pdfname = "compito_soluzioni_%04d-%02d-%02d" % (
                 p["test_year"], p["test_month"], p["test_day"])
             os.chdir("build")
-            os.system(f"pdflatex -quiet -jobname={pdfname} temp.tex")
+            # os.system(f"pdflatex -quiet -jobname={pdfname} temp.tex")
+            os.system(f"pdflatex --interaction=batchmode -jobname={pdfname} temp.tex")
             os.chdir("..")
             shutil.copy(os.path.join("build", f"{pdfname}.pdf"), ".")
 
