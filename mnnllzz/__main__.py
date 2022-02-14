@@ -14,7 +14,7 @@ if (len(texfiles) < 1):
 elif (len(texfiles) > 1):
     sys.exit("More than one TeX file found in current directory.")
 else:
-    print("\n  mnnllzz\n" % ver_string)
+    print("\n  mnnllzz\n")
 
 files = open(texfiles[0],"r").read().split("MNNLLZZ")
 
