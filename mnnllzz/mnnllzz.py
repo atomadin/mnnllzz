@@ -175,7 +175,9 @@ class ExamTest():
             valmax = np.maximum(val_1, val_2)
 
         # The minimum acceptable difference between two values.
-        delta = np.abs(valsol) * 0.05
+        delta1 = np.abs(valsol) * 0.05
+        delta2 = np.abs(valmax - valmin) * 0.10
+        delta = np.maximum(delta1, delta2)
 
         i_try = 0
         while (len(vv) < (num+1)):
