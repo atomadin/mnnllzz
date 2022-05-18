@@ -3,3 +3,7 @@ setup.py
 setup.cfg
 MANIFEST
 *.gz
+*.pyc
+*.pyc
+mnnllzz/__pycache__/mnnllzz.cpython-38.pyc
+mnnllzz/__pycache__/__main__.cpython-38.pyc
