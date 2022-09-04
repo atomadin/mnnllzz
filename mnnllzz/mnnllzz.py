@@ -13,10 +13,9 @@ from subprocess import PIPE, run
 import random
 from decimal import Decimal
 import numpy as np
-from numpy import sqrt, exp, sin, cos, tan, log, log10, pi, floor, abs
+# from numpy import sqrt, exp, sin, cos, tan, log, log10, pi, floor, abs
 
-# https://stackoverflow.com/questions/15933741/how-do-i-catch-a-numpy-warning-like-its-an-exception-not-just-for-testing
-np.seterr(all="raise")
+np.seterr(all="raise")  # https://stackoverflow.com/questions/15933741
 
 #%% Class definition.
 
@@ -52,25 +51,11 @@ class ExamTest():
         np.random.seed(salt_2 * (testnr + 1))   # for the values
         # Constant: uppercase alphabet.
         self._letters = string.ascii_uppercase
-
-
-    def results_init(self):
-        # The literal substitutions to be made in the TeX template.
-        self.subst = {}
-        self.subst["TESTNR"] = "%d" % self.testnr
-        self.subst["ANNO"] = "%04d" % self.test_year
-        self.subst["MESE"] = "%02d" % self.test_month
-        self.subst["GIORNO"] = "%02d" % self.test_day
-        # The variables in the problems.
-        self.x = {}
-        # The constants in the problems.
-        self.c = {}
-        # Truth values for the constraints.
-        self.constraints = []
-        # The letters of the solution.
-        self.sol_letters = []
-        # The values of the solution.
-        self.sol_values = []
+        # Numpy functions for the evaluation of formulas.
+        self.npf = {
+            "sqrt": np.sqrt, "exp": np.exp, "sin": np.sin, "cos": np.cos,
+            "tan": np.tan, "log": np.log, "log10": np.log10, "pi": np.pi,
+            "floor": np.floor, "abs": np.abs}
 
 
     def apply_subst(self):
@@ -131,10 +116,12 @@ class ExamTest():
 
 
     def eval_check(self, str_expr, label):
+        # Execute an expression with a custom set of globals and checks.
         x = self.x
         c = self.c
         try:
-            r = eval(str_expr)
+            # r = eval(str_expr)
+            r = eval(str_expr, {**self.c, **self.x, **self.npf})
         except (RuntimeWarning, OverflowError, ValueError, FloatingPointError):
             print("\n\nEvaluation error in %s" % label)
             print(json.dumps(self.values, sort_keys=True, indent=4))
@@ -175,12 +162,12 @@ class ExamTest():
         self.subst[label] = self.number_format(val)
 
 
-    def random_options(self, valsol, num=5, val_range=None, exp_range_width=None):
+    def random_options(self, valpres, num=5, val_range=None, exp_range_width=None):
         # Choose num values uniformly distributed between valmin and valmax.
         # Reject values which are too close to each other or the solution.
-        # List containing the values, including the solution.
-        vv = []
-        vv.append(valsol)
+        # List containing the values, including the solution as first element.
+        valsol = valpres[0]
+        vv = valpres.copy()
         # Decide which random distribution to use.
         if (val_range is not None):
             distro = "uniform"
@@ -206,7 +193,7 @@ class ExamTest():
 
         i_try = 0
         v_try_hist = []
-        while (len(vv) < (num+1)):
+        while (len(vv) < num):
             # Randomly choose a new value.
             ##if (distro == "uniform"):
             ##    v_try = np.random.uniform(valmin, valmax)
@@ -222,53 +209,79 @@ class ExamTest():
             i_try = i_try + 1
             # Prevent loop being stuck.
             if (i_try > 100):
-                print(delta1, delta2)
-                for t in v_try_hist:
-                    print(t)
-                data = "Loop stuck in random_options\nSol: %e, Min: %e, Max: %e\n" % (valsol, valmin, valmax)
+                if (False):  # Extra data dump, just for debug.
+                    print("Stuck in function 'random_options'.")
+                    print("Data dump START")
+                    print(delta1, delta2)
+                    for t in v_try_hist:
+                        print(t)
+                    print("Data dump END")
+                data = ("Loop stuck in random_options\nSol: "
+                        "%e, Min: %e, Max: %e\n") % (valsol, valmin, valmax)
                 raise RandomSearchStuck(data)
-        # Return the list as array.  Do not include the first value, which is
-        # the solution.
-        xx = np.array(vv[1:])
-        return xx
+        # Return the new values only as an array.
+        rr = np.array(vv[len(valpres):])
+        return rr
 
 
     def solution_set(self, label_question, x_sol,
                      x_forced=None, keep_sign=True, x_range=None, num=5):
-        # Calculate random options.
+
+        # Initialize the values of the option and the respective indices,
+        # and then reshuffle the lists.
+        
+        # The correct solution.
+        vv = [x_sol]
+
+        # The forced option(s).
+        if (x_forced is not None):
+            # Be sure to have a list of values.
+            if not isinstance(x_forced, list):
+                x_forced_vals = [x_forced,]
+            else:
+                x_forced_vals = x_forced
+            # Iterate over the forced value(s) if there are choices.
+            for x_val in x_forced_vals:
+                if len(vv) < num:
+                    vv.append(x_val)
+                else:
+                    pass
+
+        # Calculate random values for the remaining choices.
         try:
             if (x_range is not None):
-                xx = self.random_options(x_sol, num=num, val_range=[x_range[0], x_range[1]])
+                rr = self.random_options(vv, num=num, val_range=[x_range[0], x_range[1]])
             elif (keep_sign):
-                xx = self.random_options(x_sol, num=num, exp_range_width=0.7)
+                rr = self.random_options(vv, num=num, exp_range_width=0.7)
             else:
-                xx = self.random_options(x_sol, num=num, exp_range_width=0.7)
-                # Change sign to at least 3 numbers, so that if one of them is
-                # swapped for the correct solution, we still have at least 2
-                # options with each sign.
-                num_opp = random.randint(3,(num+1)//2)
-                for i in range(num_opp):
-                    xx[i] = -xx[i]
-                random.shuffle(xx)
+                rr = self.random_options(vv, num=num, exp_range_width=0.7)
+                # Alternate the signs.
+                for i,r in enumerate(rr):
+                    rr[i] = r * (-1)**i
+            # Append to the list of choice values and indices.
+            for r in rr:
+                vv.append(r)
         except (RuntimeWarning, OverflowError):
             print("Error in random options of solution %s" % label_question)
             print("%e" % (x_sol))
             sys.exit("Stop.")
 
-        # The available choices.
-        avail = list(range(num))
-        # Randomly place the solution and remove the chosen position.
-        i_sol = random.choice(avail)
-        xx[i_sol] = x_sol
-        avail.remove(i_sol)
+        # Shuffle the values and save the new index of the correct solution.
+        if len(vv) != num:
+            print("Error in preparing options of solution %s" % label_question)
+            print("%d" % len(vv))
+            sys.exit("Stop.")
+        ii = list(range(num))
+        random.shuffle(ii)
+        xx = [0.0] * num
+        for i,v in zip(ii,vv):
+            xx[i] = v
+        i_sol = ii[0]
+        
         # Save the solution to an instance list.
         self.sol_values.append(x_sol)
         self.sol_letters.append(self._letters[i_sol])
-        # Randomly place the forced (wrong) option.
-        if (x_forced is not None):
-            i_forced = random.choice(avail)
-            xx[i_forced] = x_forced
-            avail.remove(i_forced)
+
         # Save the replacements to be made in the template.
         for i_opt,(val,a) in enumerate(zip(xx,self._letters[:num])):
             # The number for this replacement.
@@ -288,17 +301,32 @@ class ExamTest():
 
 
     def values_def(self):
+
         # Iterate over several trials to satisfy constraints on the output.
         values_found = False
         n_try = 0
-
         while(not values_found):
-
-            self.results_init()
             n_try = n_try + 1
+
+            # The literal substitutions to be made in the TeX template.
+            self.subst = {}
+            self.subst["TESTNR"] = "%d" % self.testnr
+            self.subst["ANNO"] = "%04d" % self.test_year
+            self.subst["MESE"] = "%02d" % self.test_month
+            self.subst["GIORNO"] = "%02d" % self.test_day
+            # The constants in the problems.
+            self.c = {}
+            # Truth values for the constraints.
+            self.constraints = []
+            # The letters of the solution.
+            self.sol_letters = []
+            # The values of the solution.
+            self.sol_values = []
 
             # Read the JSON with the values of the parameters to fill in.
             for sol_block in self.solutions:
+                # The variables in the current problem.
+                self.x = {}
                 self.save_to_values(new=True)
                 for op in sol_block:
                     # Constant with a fixed value.
@@ -394,10 +422,13 @@ def typeset_tests(p, template_text):
     sol_values = []
     all_variables = []
 
+    if (p["solution_test"] and not p["values_only"]):
+        num_runs = p["num_tests"] + 1
+    else:
+        num_runs = p["num_tests"]
+
     # Iterate over the tests.
     for i_test in np.arange(p["num_tests"]):
-
-        update_progress(i_test/p["num_tests"])
 
         # Create a test instance, based on the template.
         test_data = ExamTest(
@@ -419,31 +450,44 @@ def typeset_tests(p, template_text):
         sol_values.append(test_data.sol_values)
         all_variables.append(test_data.values)
 
-        # Substitute the random values into the template.
-        test_data.apply_subst()
+        if not p["values_only"]:
+            # Substitute the random values into the template.
+            test_data.apply_subst()
 
-        # Save the complete source TeX file.
-        with open(os.path.join("build","temp.tex"), "w") as f:
-            f.write(test_data.source_text)
+            # Save the complete source TeX file.
+            with open(os.path.join("build","temp.tex"), "w") as f:
+                f.write(test_data.source_text)
 
-        # Compile the source TeX and move the PDF to a different folder.
-        pdfname = "compito_%03d" % test_data.testnr
-        os.chdir("build")
-        # os.system(f"pdflatex -quiet -jobname={pdfname} temp.tex")
-        # os.system(f"pdflatex --interaction=batchmode -jobname={pdfname} temp.tex")
-        r = run(f"pdflatex --interaction=batchmode -jobname={pdfname} temp.tex", stdout=PIPE, stderr=PIPE, universal_newlines=True, shell=True)
-        os.chdir("..")
-        shutil.copy(os.path.join("build", f"{pdfname}.pdf"), "distribute")
+            # Compile the source TeX and move the PDF to a different folder.
+            pdfname = "compito_%03d" % test_data.testnr
+            os.chdir("build")
+            # os.system(f"pdflatex -quiet -jobname={pdfname} temp.tex")
+            # os.system(f"pdflatex --interaction=batchmode -jobname={pdfname} temp.tex")
+            r = run(f"pdflatex --interaction=batchmode -jobname={pdfname} temp.tex", stdout=PIPE, stderr=PIPE, universal_newlines=True, shell=True)
+            os.chdir("..")
+            shutil.copy(os.path.join("build", f"{pdfname}.pdf"), "distribute")
 
-        # Save all values.
-        with open(os.path.join("distribute","all_values.json"), "w") as f:
-            f.write(json.dumps(all_variables, sort_keys=True, indent=4))
 
-    update_progress(1.0)
+        update_progress((i_test + 1.0)/num_runs)
 
+    if p["values_only"]:
+        # # Save all values.
+        # with open(os.path.join("distribute","all_values.json"), "w") as f:
+        #     f.write(json.dumps(all_variables, sort_keys=True, indent=4))
+        print(json.dumps(all_variables, sort_keys=True, indent=4))
+
+    # Save the letters and the values of the solution.
+    # Each row correspond to a test, each column to a question.
+    # Use TSV, which makes it easier to copy-paste to a web-based spreadsheet.
+
+    with open(os.path.join("distribute","solution_letters.tsv"), "w") as f:
+            f.write("\n".join(["\t".join(letters) for letters in sol_letters]))
+
+    with open(os.path.join("distribute","solution_numbers.tsv"), "w") as f:
+            f.write("\n".join(["\t".join(map(lambda x: "%.4E" % x, values)) for values in sol_values]))
 
     # Produce test with correct solutions marked.
-    if p["solution_test"]:
+    if (p["solution_test"] and not p["values_only"]):
 
         # Create a test instance, based on the template.
         test_data = ExamTest(
@@ -477,18 +521,10 @@ def typeset_tests(p, template_text):
             print("ERROR: Cannot find random values for solution test.")
             print(err.msg)
 
+        update_progress(1.0)
+
 
     # Clean the build folder.
     if os.path.exists("build") and os.path.isdir("build"):
         shutil.rmtree("build")
-
-    # Save the letters and the values of the solution.
-    # Each row correspond to a test, each column to a question.
-    # Use TSV, which makes it easier to copy-paste to a web-based spreadsheet.
-
-    with open(os.path.join("distribute","solution_letters.tsv"), "w") as f:
-            f.write("\n".join(["\t".join(letters) for letters in sol_letters]))
-
-    with open(os.path.join("distribute","solution_numbers.tsv"), "w") as f:
-            f.write("\n".join(["\t".join(map(lambda x: "%.4E" % x, values)) for values in sol_values]))
 
