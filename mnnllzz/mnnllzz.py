@@ -521,7 +521,7 @@ def typeset_tests(p, template_text):
             # Create a test instance, based on the template.
             test_data = ExamTest(
                 template_text, i_test + 1, p["solutions"],
-                p["test_year"], p["test_month"], p["test_day"],
+                p["test_name"], p["test_year"], p["test_month"], p["test_day"],
                 p["random_salt_1"], p["random_salt_2"],
                 mark_sol=False)
 
